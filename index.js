@@ -1,362 +1,540 @@
-const WINDOWS_1252_EXTRA = {
-    0x80: '€',
-    0x82: '‚',
-    0x83: 'ƒ',
-    0x84: '„',
-    0x85: '…',
-    0x86: '†',
-    0x87: '‡',
-    0x88: 'ˆ',
-    0x89: '‰',
-    0x8a: 'Š',
-    0x8b: '‹',
-    0x8c: 'Œ',
-    0x8e: 'Ž',
-    0x91: '‘',
-    0x92: '’',
-    0x93: '“',
-    0x94: '”',
-    0x95: '•',
-    0x96: '–',
-    0x97: '—',
-    0x98: '˜',
-    0x99: '™',
-    0x9a: 'š',
-    0x9b: '›',
-    0x9c: 'œ',
-    0x9e: 'ž',
-    0x9f: 'Ÿ'
+// src/index.ts
+import { CacheableMemory, CacheableStats, shorthandToTime } from "cacheable";
+import { Hookified as Hookified2 } from "hookified";
+
+// src/store.ts
+import { Cacheable } from "cacheable";
+import { Hookified } from "hookified";
+var NodeCacheStore = class extends Hookified {
+  _maxKeys = 0;
+  _cache = new Cacheable();
+  constructor(options) {
+    super();
+    if (options) {
+      const cacheOptions = {
+        ttl: options.ttl,
+        primary: options.primary,
+        secondary: options.secondary,
+        stats: options.stats ?? true
+      };
+      this._cache = new Cacheable(cacheOptions);
+      if (options.maxKeys) {
+        this._maxKeys = options.maxKeys;
+      }
+    }
+    this._cache.on("error", (error) => {
+      this.emit("error", error);
+    });
+  }
+  /**
+   * Cacheable instance.
+   * @returns {Cacheable}
+   * @readonly
+   */
+  get cache() {
+    return this._cache;
+  }
+  /**
+   * Time to live in milliseconds.
+   * @returns {number | string | undefined}
+   * @readonly
+   */
+  get ttl() {
+    return this._cache.ttl;
+  }
+  /**
+   * Time to live in milliseconds.
+   * @param {number | string | undefined} ttl
+   */
+  set ttl(ttl) {
+    this._cache.ttl = ttl;
+  }
+  /**
+   * Primary cache store.
+   * @returns {Keyv<T>}
+   * @readonly
+   */
+  get primary() {
+    return this._cache.primary;
+  }
+  /**
+   * Primary cache store.
+   * @param {Keyv<T>} primary
+   */
+  set primary(primary) {
+    this._cache.primary = primary;
+  }
+  /**
+   * Secondary cache store. Learn more about the secondary cache store in the
+   * [cacheable](https://github.com/jaredwray/cacheable/tree/main/packages/cacheable#storage-tiering-and-caching) documentation.
+   * @returns {Keyv<T> | undefined}
+   */
+  get secondary() {
+    return this._cache.secondary;
+  }
+  /**
+   * Secondary cache store. Learn more about the secondary cache store in the
+   * [cacheable](https://github.com/jaredwray/cacheable/tree/main/packages/cacheable#storage-tiering-and-caching) documentation.
+   * @param {Keyv | undefined} secondary
+   */
+  set secondary(secondary) {
+    this._cache.secondary = secondary;
+  }
+  /**
+   * Maximum number of keys to store in the cache. if this is set to a value greater than 0,
+   * the cache will keep track of the number of keys and will not store more than the specified number of keys.
+   * @returns {number}
+   * @readonly
+   */
+  get maxKeys() {
+    return this._maxKeys;
+  }
+  /**
+   * Maximum number of keys to store in the cache. if this is set to a value greater than 0,
+   * the cache will keep track of the number of keys and will not store more than the specified number of keys.
+   * @param {number} maxKeys
+   */
+  set maxKeys(maxKeys) {
+    this._maxKeys = maxKeys;
+    if (this._maxKeys > 0) {
+      this._cache.stats.enabled = true;
+    }
+  }
+  /**
+   * Set a key/value pair in the cache.
+   * @param {string | number} key
+   * @param {T} value
+   * @param {number} [ttl]
+   * @returns {boolean}
+   */
+  async set(key, value, ttl) {
+    if (this._maxKeys > 0) {
+      if (this._cache.stats.count >= this._maxKeys) {
+        return false;
+      }
+    }
+    await this._cache.set(key.toString(), value, ttl);
+    return true;
+  }
+  /**
+   * Set multiple key/value pairs in the cache.
+   * @param {PartialNodeCacheItem[]} list
+   * @returns {void}
+   */
+  async mset(list) {
+    const items = [];
+    for (const item of list) {
+      items.push({
+        key: item.key.toString(),
+        value: item.value,
+        ttl: item.ttl
+      });
+    }
+    await this._cache.setMany(items);
+  }
+  /**
+   * Get a value from the cache.
+   * @param {string | number} key
+   * @returns {any | undefined}
+   */
+  async get(key) {
+    return this._cache.get(key.toString());
+  }
+  /**
+   * Get multiple values from the cache.
+   * @param {Array<string | number>} keys
+   * @returns {Record<string, any | undefined>}
+   */
+  async mget(keys) {
+    const result = {};
+    for (const key of keys) {
+      result[key.toString()] = await this._cache.get(key.toString());
+    }
+    return result;
+  }
+  /**
+   * Delete a key from the cache.
+   * @param {string | number} key
+   * @returns {boolean}
+   */
+  async del(key) {
+    return this._cache.delete(key.toString());
+  }
+  /**
+   * Delete multiple keys from the cache.
+   * @param {Array<string | number>} keys
+   * @returns {boolean}
+   */
+  async mdel(keys) {
+    return this._cache.deleteMany(keys.map((key) => key.toString()));
+  }
+  /**
+   * Clear the cache.
+   * @returns {void}
+   */
+  async clear() {
+    return this._cache.clear();
+  }
+  /**
+   * Check if a key exists in the cache.
+   * @param {string | number} key
+   * @returns {boolean}
+   */
+  async setTtl(key, ttl) {
+    const item = await this._cache.get(key.toString());
+    if (item) {
+      await this._cache.set(key.toString(), item, ttl);
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Check if a key exists in the cache. If it does exist it will get the value and delete the item from the cache.
+   * @param {string | number} key
+   * @returns {T | undefined}
+   */
+  async take(key) {
+    return this._cache.take(key.toString());
+  }
+  /**
+   * Disconnect from the cache.
+   * @returns {void}
+   */
+  async disconnect() {
+    await this._cache.disconnect();
+  }
 };
-const WINDOWS_1252_REVERSE = {};
-for (const [code, char] of Object.entries(WINDOWS_1252_EXTRA)) {
-    WINDOWS_1252_REVERSE[char] = Number.parseInt(code, 10);
-}
-let _utf8Decoder;
-let _utf8Encoder;
-function utf8Decoder() {
-    if (_utf8Decoder === undefined) {
-        try {
-            _utf8Decoder = typeof globalThis.TextDecoder === 'undefined' ? null : new globalThis.TextDecoder('utf-8');
-        }
-        catch {
-            _utf8Decoder = null;
-        }
+
+// src/index.ts
+var NodeCacheErrors = /* @__PURE__ */ ((NodeCacheErrors2) => {
+  NodeCacheErrors2["ECACHEFULL"] = "Cache max keys amount exceeded";
+  NodeCacheErrors2["EKEYTYPE"] = "The key argument has to be of type `string` or `number`. Found: `__key`";
+  NodeCacheErrors2["EKEYSTYPE"] = "The keys argument has to be an array.";
+  NodeCacheErrors2["ETTLTYPE"] = "The ttl argument has to be a number or a string for shorthand ttl.";
+  return NodeCacheErrors2;
+})(NodeCacheErrors || {});
+var NodeCache = class extends Hookified2 {
+  options = {
+    stdTTL: 0,
+    checkperiod: 600,
+    useClones: true,
+    deleteOnExpire: true,
+    maxKeys: -1
+  };
+  store = /* @__PURE__ */ new Map();
+  _stats = new CacheableStats({ enabled: true });
+  _cacheable = new CacheableMemory();
+  intervalId = 0;
+  constructor(options) {
+    super();
+    if (options) {
+      this.options = { ...this.options, ...options };
     }
-    return _utf8Decoder !== null && _utf8Decoder !== void 0 ? _utf8Decoder : undefined;
-}
-function utf8Encoder() {
-    if (_utf8Encoder === undefined) {
-        try {
-            _utf8Encoder = typeof globalThis.TextEncoder === 'undefined' ? null : new globalThis.TextEncoder();
-        }
-        catch {
-            _utf8Encoder = null;
-        }
+    this.startInterval();
+  }
+  /**
+   * Sets a key value pair. It is possible to define a ttl (in seconds). Returns true on success.
+   * @param {string | number} key - it will convert the key to a string
+   * @param {T} value
+   * @param {number | string} [ttl] - this is in seconds and undefined will use the default ttl
+   * @returns {boolean}
+   */
+  set(key, value, ttl = 0) {
+    if (typeof key !== "string" && typeof key !== "number") {
+      throw this.createError("The key argument has to be of type `string` or `number`. Found: `__key`" /* EKEYTYPE */, key);
     }
-    return _utf8Encoder !== null && _utf8Encoder !== void 0 ? _utf8Encoder : undefined;
-}
-const CHUNK = 32 * 1024;
-const REPLACEMENT = 0xfffd;
-/**
- * Decode text from binary data
- */
-export function textDecode(bytes, encoding = 'utf-8') {
-    switch (encoding.toLowerCase()) {
-        case 'utf-8':
-        case 'utf8': {
-            const dec = utf8Decoder();
-            return dec ? dec.decode(bytes) : decodeUTF8(bytes);
-        }
-        case 'utf-16le':
-            return decodeUTF16LE(bytes);
-        case 'us-ascii':
-        case 'ascii':
-            return decodeASCII(bytes);
-        case 'latin1':
-        case 'iso-8859-1':
-            return decodeLatin1(bytes);
-        case 'windows-1252':
-            return decodeWindows1252(bytes);
-        default:
-            throw new RangeError(`Encoding '${encoding}' not supported`);
+    if (ttl && typeof ttl !== "number" && typeof ttl !== "string") {
+      throw this.createError("The ttl argument has to be a number or a string for shorthand ttl." /* ETTLTYPE */, this.formatKey(key));
     }
-}
-export function textEncode(input = '', encoding = 'utf-8') {
-    switch (encoding.toLowerCase()) {
-        case 'utf-8':
-        case 'utf8': {
-            const enc = utf8Encoder();
-            return enc ? enc.encode(input) : encodeUTF8(input);
-        }
-        case 'utf-16le':
-            return encodeUTF16LE(input);
-        case 'us-ascii':
-        case 'ascii':
-            return encodeASCII(input);
-        case 'latin1':
-        case 'iso-8859-1':
-            return encodeLatin1(input);
-        case 'windows-1252':
-            return encodeWindows1252(input);
-        default:
-            throw new RangeError(`Encoding '${encoding}' not supported`);
+    const keyValue = this.formatKey(key);
+    let ttlValue = 0;
+    if (this.options.stdTTL) {
+      ttlValue = this.getExpirationTimestamp(this.options.stdTTL);
     }
-}
-function flushChunk(parts, chunk) {
-    if (chunk.length === 0) {
-        return;
+    if (ttl) {
+      ttlValue = this.getExpirationTimestamp(ttl);
     }
-    parts.push(String.fromCharCode.apply(null, chunk));
-    chunk.length = 0;
-}
-function pushCodeUnit(parts, chunk, codeUnit) {
-    chunk.push(codeUnit);
-    if (chunk.length >= CHUNK) {
-        flushChunk(parts, chunk);
+    let expirationTimestamp = 0;
+    if (ttlValue && ttlValue > 0) {
+      expirationTimestamp = ttlValue;
     }
-}
-function pushCodePoint(parts, chunk, cp) {
-    if (cp <= 0xffff) {
-        pushCodeUnit(parts, chunk, cp);
-        return;
+    if (this.options.maxKeys) {
+      const { maxKeys } = this.options;
+      if (maxKeys > -1 && this.store.size >= maxKeys) {
+        throw this.createError("Cache max keys amount exceeded" /* ECACHEFULL */, this.formatKey(key));
+      }
     }
-    cp -= 0x10000;
-    pushCodeUnit(parts, chunk, 0xd800 + (cp >> 10));
-    pushCodeUnit(parts, chunk, 0xdc00 + (cp & 0x3ff));
-}
-function decodeUTF8(bytes) {
-    const parts = [];
-    const chunk = [];
-    let i = 0;
-    // Match TextDecoder("utf-8") default BOM handling
-    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-        i = 3;
+    this.store.set(keyValue, {
+      key: keyValue,
+      value,
+      ttl: expirationTimestamp
+    });
+    this.emit("set", keyValue, value, ttlValue);
+    this._stats.incrementKSize(keyValue);
+    this._stats.incrementVSize(value);
+    this._stats.setCount(this.store.size);
+    return true;
+  }
+  /**
+   * Sets multiple key val pairs. It is possible to define a ttl (seconds). Returns true on success.
+   * @param {PartialNodeCacheItem<T>[]} data an array of key value pairs with optional ttl
+   * @returns {boolean}
+   */
+  mset(data) {
+    if (!Array.isArray(data)) {
+      throw this.createError("The keys argument has to be an array." /* EKEYSTYPE */);
     }
-    while (i < bytes.length) {
-        const b1 = bytes[i];
-        if (b1 <= 0x7f) {
-            pushCodeUnit(parts, chunk, b1);
-            i++;
-            continue;
-        }
-        // Invalid leading bytes: continuation byte or impossible prefixes
-        if (b1 < 0xc2 || b1 > 0xf4) {
-            pushCodeUnit(parts, chunk, REPLACEMENT);
-            i++;
-            continue;
-        }
-        const length = b1 <= 0xdf ? 2 : b1 <= 0xef ? 3 : 4;
-        let cp = b1 & (0x7f >> length);
-        let lower = b1 === 0xe0 ? 0xa0 : b1 === 0xf0 ? 0x90 : 0x80;
-        let upper = b1 === 0xed ? 0x9f : b1 === 0xf4 ? 0x8f : 0xbf;
-        let consumed = 1;
-        i++;
-        // Consume only the valid prefix. An interrupting byte starts a new sequence.
-        while (consumed < length && i < bytes.length) {
-            const next = bytes[i];
-            if (next < lower || next > upper) {
-                break;
-            }
-            cp = (cp << 6) | (next & 0x3f);
-            consumed++;
-            i++;
-            lower = 0x80;
-            upper = 0xbf;
-        }
-        pushCodePoint(parts, chunk, consumed === length ? cp : REPLACEMENT);
+    for (const item of data) {
+      this.set(item.key, item.value, item.ttl);
     }
-    flushChunk(parts, chunk);
-    return parts.join('');
-}
-function decodeUTF16LE(bytes) {
-    const parts = [];
-    const chunk = [];
-    const len = bytes.length;
-    let i = 0;
-    // Match TextDecoder("utf-16le") default BOM handling
-    if (len >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-        i = 2;
+    return true;
+  }
+  /**
+   * Gets a saved value from the cache. Returns a undefined if not found or expired. If the value was found it returns the value.
+   * @param {string | number} key if the key is a number it will convert it to a string
+   * @returns {T} the value or undefined
+   */
+  get(key) {
+    const result = this.store.get(this.formatKey(key));
+    if (result) {
+      if (result.ttl > 0) {
+        if (result.ttl < Date.now()) {
+          if (this.options.deleteOnExpire) {
+            this.del(key);
+          }
+          this._stats.incrementMisses();
+          this.emit("expired", this.formatKey(key), result.value);
+          return void 0;
+        }
+        this._stats.incrementHits();
+        if (this.options.useClones) {
+          return this._cacheable.clone(result.value);
+        }
+        return result.value;
+      }
+      this._stats.incrementHits();
+      if (this.options.useClones) {
+        return this._cacheable.clone(result.value);
+      }
+      return result.value;
     }
-    while (i + 1 < len) {
-        const u1 = bytes[i] | (bytes[i + 1] << 8);
-        i += 2;
-        // High surrogate
-        if (u1 >= 0xd800 && u1 <= 0xdbff) {
-            if (i + 1 < len) {
-                const u2 = bytes[i] | (bytes[i + 1] << 8);
-                if (u2 >= 0xdc00 && u2 <= 0xdfff) {
-                    pushCodeUnit(parts, chunk, u1);
-                    pushCodeUnit(parts, chunk, u2);
-                    i += 2;
-                }
-                else {
-                    pushCodeUnit(parts, chunk, REPLACEMENT);
-                }
-            }
-            else {
-                pushCodeUnit(parts, chunk, REPLACEMENT);
-            }
-            continue;
-        }
-        // Lone low surrogate
-        if (u1 >= 0xdc00 && u1 <= 0xdfff) {
-            pushCodeUnit(parts, chunk, REPLACEMENT);
-            continue;
-        }
-        pushCodeUnit(parts, chunk, u1);
+    this._stats.incrementMisses();
+    return void 0;
+  }
+  /**
+   * Gets multiple saved values from the cache. Returns an empty object {} if not found or expired.
+   * If the value was found it returns an object with the key value pair.
+   * @param {Array<string | number} keys an array of keys
+   * @returns {Record<string, T | undefined>} an object with the key as a property and the value as the value
+   */
+  mget(keys) {
+    const result = {};
+    for (const key of keys) {
+      const value = this.get(key);
+      if (value) {
+        result[this.formatKey(key)] = value;
+      }
     }
-    // Odd trailing byte
-    if (i < len) {
-        pushCodeUnit(parts, chunk, REPLACEMENT);
+    return result;
+  }
+  /**
+   * Get the cached value and remove the key from the cache. Equivalent to calling get(key) + del(key).
+   * Useful for implementing single use mechanism such as OTP, where once a value is read it will become obsolete.
+   * @param {string | number} key
+   * @returns {T | undefined} the value or undefined
+   */
+  take(key) {
+    const result = this.get(key);
+    if (result) {
+      this.del(key);
+      if (this.options.useClones) {
+        return this._cacheable.clone(result);
+      }
+      return result;
     }
-    flushChunk(parts, chunk);
-    return parts.join('');
-}
-function decodeASCII(bytes) {
-    const parts = [];
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-        const end = Math.min(bytes.length, i + CHUNK);
-        const codes = new Array(end - i);
-        for (let j = i, k = 0; j < end; j++, k++) {
-            codes[k] = bytes[j] & 0x7f;
-        }
-        parts.push(String.fromCharCode.apply(null, codes));
+    return void 0;
+  }
+  /**
+   * Delete a key. Returns the number of deleted entries. A delete will never fail.
+   * @param {string | number | Array<string | number>} key if the key is a number it will convert it to a string. if an array is passed it will delete all keys in the array.
+   * @returns {number} if it was successful it will return the count that was deleted
+   */
+  del(key) {
+    if (Array.isArray(key)) {
+      return this.mdel(key);
     }
-    return parts.join('');
-}
-function decodeLatin1(bytes) {
-    const parts = [];
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-        const end = Math.min(bytes.length, i + CHUNK);
-        const codes = new Array(end - i);
-        for (let j = i, k = 0; j < end; j++, k++) {
-            codes[k] = bytes[j];
-        }
-        parts.push(String.fromCharCode.apply(null, codes));
+    const result = this.store.get(this.formatKey(key));
+    if (result) {
+      const keyValue = this.formatKey(key);
+      this.store.delete(keyValue);
+      this.emit("del", keyValue, result.value);
+      this._stats.decreaseKSize(keyValue);
+      this._stats.decreaseVSize(result.value);
+      this._stats.setCount(this.store.size);
+      return 1;
     }
-    return parts.join('');
-}
-function decodeWindows1252(bytes) {
-    const parts = [];
-    let out = '';
-    for (let i = 0; i < bytes.length; i++) {
-        const b = bytes[i];
-        const extra = b >= 0x80 && b <= 0x9f ? WINDOWS_1252_EXTRA[b] : undefined;
-        out += extra !== null && extra !== void 0 ? extra : String.fromCharCode(b);
-        if (out.length >= CHUNK) {
-            parts.push(out);
-            out = '';
-        }
+    return 0;
+  }
+  /**
+   * Delete all keys in Array that exist. Returns the number of deleted entries.
+   * @param {Array<string | number>} keys an array of keys
+   * @returns {number} the count of deleted keys
+   */
+  mdel(keys) {
+    let result = 0;
+    for (const key of keys) {
+      result += this.del(key);
     }
-    if (out) {
-        parts.push(out);
+    return result;
+  }
+  /**
+   * Redefine the ttl of a key. Returns true if the key has been found and changed.
+   * Otherwise returns false. If the ttl-argument isn't passed the default-TTL will be used.
+   * @param {string | number} key if the key is a number it will convert it to a string
+   * @param {number | string} [ttl] the ttl in seconds if number, or a shorthand string like '1h' for 1 hour
+   * @returns {boolean} true if the key has been found and changed. Otherwise returns false.
+   */
+  ttl(key, ttl) {
+    const result = this.store.get(this.formatKey(key));
+    if (result) {
+      const ttlValue = ttl ?? this.options.stdTTL;
+      result.ttl = this.getExpirationTimestamp(ttlValue);
+      this.store.set(this.formatKey(key), result);
+      return true;
     }
-    return parts.join('');
-}
-function encodeUTF8(str) {
-    const out = [];
-    for (let i = 0; i < str.length; i++) {
-        let cp = str.charCodeAt(i);
-        // Valid surrogate pair
-        if (cp >= 0xd800 && cp <= 0xdbff) {
-            if (i + 1 < str.length) {
-                const lo = str.charCodeAt(i + 1);
-                if (lo >= 0xdc00 && lo <= 0xdfff) {
-                    cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
-                    i++;
-                }
-                else {
-                    cp = REPLACEMENT;
-                }
-            }
-            else {
-                cp = REPLACEMENT;
-            }
-        }
-        else if (cp >= 0xdc00 && cp <= 0xdfff) {
-            // Lone low surrogate
-            cp = REPLACEMENT;
-        }
-        if (cp < 0x80) {
-            out.push(cp);
-        }
-        else if (cp < 0x800) {
-            out.push(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
-        }
-        else if (cp < 0x10000) {
-            out.push(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
-        }
-        else {
-            out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
-        }
+    return false;
+  }
+  /**
+   * Receive the ttl of a key.
+   * @param {string | number} key if the key is a number it will convert it to a string
+   * @returns {number | undefined} 0 if this key has no ttl, undefined if this key is not in the cache,
+   * a timestamp in ms representing the time at which this key will expire
+   */
+  getTtl(key) {
+    const result = this.store.get(this.formatKey(key));
+    if (result) {
+      if (result.ttl === 0) {
+        return 0;
+      }
+      return result.ttl;
     }
-    return new Uint8Array(out);
-}
-function encodeUTF16LE(str) {
-    // Preserve JS string code units, but do not emit non-well-formed UTF-16.
-    // Replace lone surrogates with U+FFFD.
-    const units = [];
-    for (let i = 0; i < str.length; i++) {
-        const u = str.charCodeAt(i);
-        if (u >= 0xd800 && u <= 0xdbff) {
-            if (i + 1 < str.length) {
-                const lo = str.charCodeAt(i + 1);
-                if (lo >= 0xdc00 && lo <= 0xdfff) {
-                    units.push(u, lo);
-                    i++;
-                }
-                else {
-                    units.push(REPLACEMENT);
-                }
-            }
-            else {
-                units.push(REPLACEMENT);
-            }
-            continue;
+    return void 0;
+  }
+  /**
+   * Returns an array of all existing keys. [ "all", "my", "keys", "foo", "bar" ]
+   * @returns {string[]} an array of all keys
+   */
+  keys() {
+    const result = [];
+    for (const key of this.store.keys()) {
+      result.push(key);
+    }
+    return result;
+  }
+  /**
+   * Returns boolean indicating if the key is cached.
+   * @param {string | number} key if the key is a number it will convert it to a string
+   * @returns {boolean} true if the key is cached
+   */
+  has(key) {
+    return this.store.has(this.formatKey(key));
+  }
+  /**
+   * Gets the stats of the cache
+   * @returns {NodeCacheStats} the stats of the cache
+   */
+  getStats() {
+    const stats = {
+      keys: this._stats.count,
+      hits: this._stats.hits,
+      misses: this._stats.misses,
+      ksize: this._stats.ksize,
+      vsize: this._stats.vsize
+    };
+    return stats;
+  }
+  /**
+   * Flush the whole data.
+   * @returns {void}
+   */
+  flushAll() {
+    this.store.clear();
+    this.flushStats();
+    this.emit("flush");
+  }
+  /**
+   * Flush the stats.
+   * @returns {void}
+   */
+  flushStats() {
+    this._stats = new CacheableStats({ enabled: true });
+    this.emit("flush_stats");
+  }
+  /**
+   * Close the cache. This will clear the interval timeout which is set on check period option.
+   * @returns {void}
+   */
+  close() {
+    this.stopInterval();
+  }
+  /**
+   * Get the interval id
+   * @returns {number | NodeJS.Timeout} the interval id
+   */
+  getIntervalId() {
+    return this.intervalId;
+  }
+  startInterval() {
+    if (this.options.checkperiod && this.options.checkperiod > 0) {
+      const checkPeriodinSeconds = this.options.checkperiod * 1e3;
+      this.intervalId = setInterval(() => {
+        this.checkData();
+      }, checkPeriodinSeconds).unref();
+      return;
+    }
+    this.intervalId = 0;
+  }
+  stopInterval() {
+    if (this.intervalId !== 0) {
+      clearInterval(this.intervalId);
+      this.intervalId = 0;
+    }
+  }
+  formatKey(key) {
+    return key.toString();
+  }
+  getExpirationTimestamp(ttlInSeconds) {
+    if (typeof ttlInSeconds === "string") {
+      return shorthandToTime(ttlInSeconds);
+    }
+    const currentTimestamp = Date.now();
+    const ttlInMilliseconds = ttlInSeconds * 1e3;
+    const expirationTimestamp = currentTimestamp + ttlInMilliseconds;
+    return expirationTimestamp;
+  }
+  checkData() {
+    for (const [key, value] of this.store.entries()) {
+      if (value.ttl > 0 && value.ttl < Date.now()) {
+        if (this.options.deleteOnExpire) {
+          this.del(key);
         }
-        if (u >= 0xdc00 && u <= 0xdfff) {
-            units.push(REPLACEMENT);
-            continue;
-        }
-        units.push(u);
+        this.emit("expired", this.formatKey(key), value.value);
+      }
     }
-    const out = new Uint8Array(units.length * 2);
-    for (let i = 0; i < units.length; i++) {
-        const code = units[i];
-        const o = i * 2;
-        out[o] = code & 0xff;
-        out[o + 1] = code >>> 8;
+  }
+  createError(errorCode, key) {
+    let error = errorCode;
+    if (key) {
+      error = error.replace("__key", key);
     }
-    return out;
-}
-function encodeASCII(str) {
-    const out = new Uint8Array(str.length);
-    for (let i = 0; i < str.length; i++) {
-        out[i] = str.charCodeAt(i) & 0x7f;
-    }
-    return out;
-}
-function encodeLatin1(str) {
-    const out = new Uint8Array(str.length);
-    for (let i = 0; i < str.length; i++) {
-        out[i] = str.charCodeAt(i) & 0xff;
-    }
-    return out;
-}
-function encodeWindows1252(str) {
-    const out = new Uint8Array(str.length);
-    for (let i = 0; i < str.length; i++) {
-        const ch = str[i];
-        const code = ch.charCodeAt(0);
-        if (WINDOWS_1252_REVERSE[ch] !== undefined) {
-            out[i] = WINDOWS_1252_REVERSE[ch];
-            continue;
-        }
-        if ((code >= 0x00 && code <= 0x7f) || (code >= 0xa0 && code <= 0xff)) {
-            out[i] = code;
-            continue;
-        }
-        out[i] = 0x3f; // '?'
-    }
-    return out;
-}
+    return new Error(error);
+  }
+};
+var index_default = NodeCache;
+export {
+  NodeCache,
+  NodeCacheErrors,
+  NodeCacheStore,
+  index_default as default
+};
+/* v8 ignore next -- @preserve */
